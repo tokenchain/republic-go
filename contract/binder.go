@@ -174,14 +174,14 @@ func (binder *Binder) SubmitOrder(ord order.Order) error {
 func (binder *Binder) submitOrder(ord order.Order) (*types.Transaction, error) {
 	// If the gas price is greater than the gas price limit, temporarily lower
 	// the gas price for this request
-	lastGasPrice := binder.transactOpts.GasPrice
-	submissionGasPriceLimit, err := binder.renExSettlement.SubmissionGasPriceLimit(binder.callOpts)
+	previousGasPrice := binder.transactOpts.GasPrice
+	submitOrderGasPriceLimit, err := binder.renExSettlement.SubmitOrderGasPriceLimit(binder.transactOpts)
 	if err == nil {
 		// Set gas price to the appropriate limit
-		binder.transactOpts.GasPrice = submissionGasPriceLimit
+		binder.transactOpts.GasPrice = submitOrderGasPriceLimit
 		// Reset gas price
 		defer func() {
-			binder.transactOpts.GasPrice = lastGasPrice
+			binder.transactOpts.GasPrice = previousGasPrice
 		}()
 	}
 
