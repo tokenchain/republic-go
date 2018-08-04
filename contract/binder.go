@@ -54,7 +54,6 @@ type Binder struct {
 	darknodeRegistry *bindings.DarknodeRegistry
 	orderbook        *bindings.Orderbook
 	renExSettlement  *bindings.Settlement
-	renExBalance     *bindings.RenExBalances
 	erc20            *bindings.ERC20
 }
 
@@ -93,12 +92,6 @@ func NewBinder(auth *bind.TransactOpts, conn Conn) (Binder, error) {
 		return Binder{}, err
 	}
 
-	renExBalance, err := bindings.NewRenExBalances(common.HexToAddress(conn.Config.RenExBalancesAddress), bind.ContractBackend(conn.Client))
-	if err != nil {
-		fmt.Println(fmt.Errorf("cannot bind to RenExBalance: %v", err))
-		return Binder{}, err
-	}
-
 	return Binder{
 		mu:           new(sync.RWMutex),
 		network:      conn.Config.Network,
@@ -110,7 +103,6 @@ func NewBinder(auth *bind.TransactOpts, conn Conn) (Binder, error) {
 		darknodeRegistry: darknodeRegistry,
 		orderbook:        orderbook,
 		renExSettlement:  renExSettlement,
-		renExBalance:     renExBalance,
 	}, nil
 }
 
@@ -1072,17 +1064,6 @@ func (binder *Binder) Withdraw(tokenAddress common.Address, value *big.Int) erro
 
 	_, err = binder.conn.PatchedWaitMined(context.Background(), tx)
 	return err
-}
-
-func (binder *Binder) CurrentBlockNumber() (*big.Int, error) {
-	binder.mu.RLock()
-	defer binder.mu.RUnlock()
-
-	header, err := binder.conn.Client.HeaderByNumber(context.Background(), nil)
-	if err != nil {
-		return nil, err
-	}
-	return header.Number, err
 }
 
 func toByte(id []byte) ([20]byte, error) {
