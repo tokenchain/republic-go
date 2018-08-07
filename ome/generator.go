@@ -5,9 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/republicprotocol/republic-go/identity"
-
 	"github.com/republicprotocol/republic-go/dispatch"
+	"github.com/republicprotocol/republic-go/identity"
 	"github.com/republicprotocol/republic-go/order"
 	"github.com/republicprotocol/republic-go/orderbook"
 	"github.com/republicprotocol/republic-go/registry"
@@ -323,8 +322,6 @@ func (mat *computationMatrix) insertOrderFragment(notification orderbook.Notific
 	}
 
 	mat.sortedComputationsMu.Lock()
-	defer mat.sortedComputationsMu.Unlock()
-
 	// Iterate through the opposing list and generate computations
 	didGenerateNewComputation := false
 	for oppositeOrderFragmentIter.Next() {
@@ -362,13 +359,9 @@ func (mat *computationMatrix) insertOrderFragment(notification orderbook.Notific
 		}
 		adjustment := uint64(len(commonPath) - (index + 1))
 		computationWeight := computationWeight{weight: uint64(notification.Priority) + priority + adjustment, computation: computation}
-
-		// Insert sort into the list of sorted computations
-		didGenerateNewComputation = true
 		func() {
-			mat.sortedComputationsMu.Lock()
-			defer mat.sortedComputationsMu.Unlock()
-
+			// Insert sort into the list of sorted computations
+			didGenerateNewComputation = true
 			if len(mat.sortedComputations) == 0 {
 				mat.sortedComputations = append(mat.sortedComputations, computationWeight)
 				return
@@ -379,6 +372,7 @@ func (mat *computationMatrix) insertOrderFragment(notification orderbook.Notific
 			mat.sortedComputations = append(append(mat.sortedComputations[:n], computationWeight), mat.sortedComputations[n:]...)
 		}()
 	}
+	mat.sortedComputationsMu.Unlock()
 	if didGenerateNewComputation {
 		select {
 		case <-done:

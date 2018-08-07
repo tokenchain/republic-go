@@ -13,11 +13,10 @@ import (
 
 // A Client exposes methods for invoking RPCs on a remote server.
 type Client interface {
-	// UpdateMidpoint is used to send updated midpoint information to a given
-	// multiAddress.
+	// UpdateMidpoint sends a midpointPrice to the target MultiAddress.
 	UpdateMidpoint(ctx context.Context, to identity.MultiAddress, midpointPrice MidpointPrice) error
 
-	// MultiAddress is used when finding random nodes to send information to.
+	// MultiAddress returns the multiAddress of the client.
 	MultiAddress() identity.MultiAddress
 }
 
@@ -56,7 +55,7 @@ func (oracler *oracler) UpdateMidpoint(ctx context.Context, midpointPrice Midpoi
 	dispatch.CoForAll(randomMultiAddrs, func(i int) {
 		errs[i] = oracler.client.UpdateMidpoint(ctx, randomMultiAddrs[i], midpointPrice)
 		if errs[i] != nil {
-			logger.Error(fmt.Sprintf("cannot send midpoint price to %v: %v", randomMultiAddrs[i].Address(), err))
+			logger.Error(fmt.Sprintf("cannot send midpoint price to %v: %v", randomMultiAddrs[i].Address(), errs[i]))
 		}
 	})
 
@@ -71,7 +70,8 @@ func (oracler *oracler) UpdateMidpoint(ctx context.Context, midpointPrice Midpoi
 
 type Server interface {
 	// UpdateMidpoint verifies and stores updated midpoint information into a
-	// storer and broadcasts this information to the network.
+	// storer and broadcasts this information to the network if it is new
+	// information.
 	UpdateMidpoint(ctx context.Context, midpointPrice MidpointPrice) error
 }
 
