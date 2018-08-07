@@ -101,7 +101,10 @@ func (server *server) UpdateMidpoint(ctx context.Context, midpointPrice Midpoint
 	if err := verifier.Verify(midpointPrice.Hash(), midpointPrice.Signature); err != nil {
 		return fmt.Errorf("failed to verify midpoint price signature: %v", err)
 	}
-	oldNonce := server.midpointPriceStorer.Nonce()
+	oldNonce, err := server.midpointPriceStorer.Nonce()
+	if err != nil {
+		return err
+	}
 
 	// If the midpoint information has been updated, gossip the new information
 	// to α random nodes in the network using the Oracler.
