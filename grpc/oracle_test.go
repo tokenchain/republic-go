@@ -8,13 +8,14 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/republicprotocol/republic-go/grpc"
-	"golang.org/x/net/context"
 
 	"github.com/republicprotocol/republic-go/crypto"
 	"github.com/republicprotocol/republic-go/identity"
 	"github.com/republicprotocol/republic-go/leveldb"
 	"github.com/republicprotocol/republic-go/oracle"
+	"github.com/republicprotocol/republic-go/order"
 	"github.com/republicprotocol/republic-go/swarm"
+	"golang.org/x/net/context"
 )
 
 var _ = Describe("Oracle", func() {
@@ -67,13 +68,12 @@ var _ = Describe("Oracle", func() {
 			err = client.UpdateMidpoint(context.Background(), serviceMultiAddr, *midpointPrice)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			prices, err := midpointPriceStorer.MidpointPrice()
+			price, err := midpointPriceStorer.MidpointPrice(order.Tokens(0))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(prices.TokenPairs).Should(HaveLen(2))
-			Expect(prices.TokenPairs).Should(Equal(midpointPrice.TokenPairs))
-			Expect(prices.Prices).Should(HaveLen(2))
-			Expect(prices.Prices).Should(Equal(midpointPrice.Prices))
-			Expect(prices.Nonce).Should(Equal(midpointPrice.Nonce))
+			Expect(price).Should(Equal(uint64(0)))
+			nonce, err := midpointPriceStorer.Nonce()
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(nonce).Should(Equal(midpointPrice.Nonce))
 		})
 
 		It("should overwrite existing midpoint prices with new information", func() {
@@ -98,13 +98,12 @@ var _ = Describe("Oracle", func() {
 			err = client.UpdateMidpoint(context.Background(), serviceMultiAddr, *midpointPrice)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			prices, err := midpointPriceStorer.MidpointPrice()
+			price, err := midpointPriceStorer.MidpointPrice(order.Tokens(2))
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(prices.TokenPairs).Should(HaveLen(3))
-			Expect(prices.TokenPairs).Should(Equal(midpointPrice.TokenPairs))
-			Expect(prices.Prices).Should(HaveLen(3))
-			Expect(prices.Prices).Should(Equal(midpointPrice.Prices))
-			Expect(prices.Nonce).Should(Equal(midpointPrice.Nonce))
+			Expect(price).Should(Equal(uint64(1)))
+			nonce, err := midpointPriceStorer.Nonce()
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(nonce).Should(Equal(midpointPrice.Nonce))
 		})
 
 		It("should not update the midpoint price when it receives a lower nonce", func() {
@@ -131,13 +130,11 @@ var _ = Describe("Oracle", func() {
 			err = client.UpdateMidpoint(context.Background(), serviceMultiAddr, *oldMidpointPrice)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			prices, err := midpointPriceStorer.MidpointPrice()
+			_, err = midpointPriceStorer.MidpointPrice(order.Tokens(uint64(3)))
+			Expect(err).Should(HaveOccurred())
+			nonce, err := midpointPriceStorer.Nonce()
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(prices.TokenPairs).Should(HaveLen(2))
-			Expect(prices.TokenPairs).Should(Equal(midpointPrice.TokenPairs))
-			Expect(prices.Prices).Should(HaveLen(2))
-			Expect(prices.Prices).Should(Equal(midpointPrice.Prices))
-			Expect(prices.Nonce).Should(Equal(midpointPrice.Nonce))
+			Expect(nonce).Should(Equal(midpointPrice.Nonce))
 		})
 	})
 })

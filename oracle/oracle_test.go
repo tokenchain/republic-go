@@ -15,6 +15,7 @@ import (
 	"github.com/republicprotocol/republic-go/crypto"
 	"github.com/republicprotocol/republic-go/identity"
 	"github.com/republicprotocol/republic-go/leveldb"
+	"github.com/republicprotocol/republic-go/order"
 	"github.com/republicprotocol/republic-go/swarm"
 	"github.com/republicprotocol/republic-go/testutils"
 )
@@ -26,9 +27,9 @@ func init() {
 var _ = Describe("Oracle", func() {
 
 	var (
-		numberOfTester         = 100
-		numberOfBootsrapTester = 5
-		α                      = 5
+		numberOfTester          = 100
+		numberOfBootstrapTester = 5
+		α                       = 5
 	)
 
 	Context("when sending and receiving new oracle prices", func() {
@@ -78,16 +79,20 @@ var _ = Describe("Oracle", func() {
 				price.Signature, err = RenOraclerKey.Sign(price.Hash())
 				Expect(err).ShouldNot(HaveOccurred())
 
-				for i := 0; i < numberOfBootsrapTester; i++ {
+				for i := 0; i < numberOfBootstrapTester; i++ {
 					err = RenOracler.UpdateMidpoint(ctx, testers[i].Multi, price)
 					Expect(err).ShouldNot(HaveOccurred())
 				}
 
 				receivedTester := 0
 				for i := range testers {
-					storedPrice, err := testers[i].MidPointPriceStore.MidpointPrice()
-					Expect(err).ShouldNot(HaveOccurred())
-					if storedPrice.Equals(price) {
+					testIndex := rand.Intn(len(price.TokenPairs))
+					storedPrice, err := testers[i].MidPointPriceStore.MidpointPrice(order.Tokens(price.TokenPairs[testIndex]))
+					if err != nil {
+						log.Printf("[error] %v", err)
+						continue
+					}
+					if storedPrice == price.Prices[testIndex] {
 						receivedTester++
 					}
 				}
