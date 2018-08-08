@@ -15,6 +15,7 @@ type ComputationID [32]byte
 
 // NewComputationID returns the crypto.Keccak256 of a buy order.ID concatenated
 // with a sell order.ID.
+// TODO: Add midpoint nonce to computation ID?
 func NewComputationID(buy, sell order.ID, depth order.FragmentEpochDepth) ComputationID {
 	depthBytes := [4]byte{
 		byte(depth >> 24),
@@ -72,12 +73,14 @@ type Computations []Computation
 
 // A Computation is a combination of a buy order.Order and a sell order.Order.
 type Computation struct {
-	Timestamp  time.Time                `json:"timestamp"`
-	ID         ComputationID            `json:"id"`
-	Buy        order.Fragment           `json:"buy"`
-	Sell       order.Fragment           `json:"sell"`
-	Epoch      [32]byte                 `json:"epoch"`
-	EpochDepth order.FragmentEpochDepth `json:"epochDepth"`
+	Timestamp     time.Time                `json:"timestamp"`
+	ID            ComputationID            `json:"id"`
+	Buy           order.Fragment           `json:"buy"`
+	Sell          order.Fragment           `json:"sell"`
+	Epoch         [32]byte                 `json:"epoch"`
+	EpochDepth    order.FragmentEpochDepth `json:"epochDepth"`
+	MidpointPrice order.CoExpShare         `json:"midpointPrice"`
+	MidpointNonce uint64                   `json:"midpointNonce"`
 
 	State ComputationState `json:"state"`
 	Match bool             `json:"match"`
