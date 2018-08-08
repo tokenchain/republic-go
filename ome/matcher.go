@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/republicprotocol/republic-go/logger"
@@ -24,8 +25,10 @@ type ResolveStage byte
 // Values for ResolveStage.
 const (
 	ResolveStageNil ResolveStage = iota
-	ResolveStageMidpointPriceExp
-	ResolveStageMidpointPriceCo
+	ResolveStageMidpointBuyPriceExp
+	ResolveStageMidpointBuyPriceCo
+	ResolveStageMidpointSellPriceExp
+	ResolveStageMidpointSellPriceCo
 	ResolveStagePriceExp
 	ResolveStagePriceCo
 	ResolveStageBuyVolumeExp
@@ -41,10 +44,14 @@ func (stage ResolveStage) String() string {
 	switch stage {
 	case ResolveStageNil:
 		return "nil"
-	case ResolveStageMidpointPriceExp:
-		return "midpointPriceExp"
-	case ResolveStageMidpointPriceCo:
-		return "midpointPriceCo"
+	case ResolveStageMidpointBuyPriceExp:
+		return "midpointBuyPriceExp"
+	case ResolveStageMidpointBuyPriceCo:
+		return "midpointBuyPriceCo"
+	case ResolveStageMidpointSellPriceExp:
+		return "midpointSellPriceExp"
+	case ResolveStageMidpointSellPriceCo:
+		return "midpointSellPriceCo"
 	case ResolveStagePriceExp:
 		return "priceExp"
 	case ResolveStagePriceCo:
@@ -115,7 +122,16 @@ func (matcher *matcher) Resolve(com Computation, callback MatchCallback) {
 	if isMidpointOrder(com.Buy) || isMidpointOrder(com.Sell) {
 		// TODO: get midpoint from store and convert to a Share and store it
 		// in the computation.
-		matcher.resolve(smpc.NetworkID(com.Epoch), com, callback, ResolveStageMidpointPriceExp)
+		if err := matcher.updateMidpointData(&com); err != nil {
+			logger.Compute(logger.LevelError, err.Error())
+			callback(com)
+			return
+		}
+		if isMidpointOrder(com.Buy) {
+			matcher.resolve(smpc.NetworkID(com.Epoch), com, callback, ResolveStageMidpointBuyPriceExp)
+			return
+		}
+		matcher.resolve(smpc.NetworkID(com.Epoch), com, callback, ResolveStageMidpointSellPriceExp)
 		return
 	}
 	matcher.resolve(smpc.NetworkID(com.Epoch), com, callback, ResolveStagePriceExp)
@@ -144,44 +160,63 @@ func (matcher *matcher) resolve(networkID smpc.NetworkID, com Computation, callb
 }
 
 func (matcher *matcher) resolveValues(values []uint64, networkID smpc.NetworkID, com Computation, callback MatchCallback, stage ResolveStage) {
-	if len(values) < 1 {
+	if len(values) != 1 {
 		logger.Compute(logger.LevelError, fmt.Sprintf("cannot resolve %v: unexpected number of values: %v", stage, len(values)))
 		return
 	}
 
 	switch stage {
-	case ResolveStageMidpointPriceExp:
-		// nextStage := ResolveStageNil
-
-		// for _, value := range values {
-		// 	if !isGreaterThanOrEqualToZero(value) {
-
-		// 	}
-		// 	if isGreaterThanZero(value) {
-		// 		nextStage = stage + 2
-		// 		if isMidpointOrder(com.Buy) && isMidpointOrder(com.Sell) {
-		// 			nextStage = stage + 6
-		// 		}
-		// 		matcher.resolve(networkID, com, callback, nextStage)
-		// 		return
-		// 	}
-		// 	if isEqualToZero(value) {
-		// 		nextStage = stage + 1
-		// 		matcher.resolve(networkID, com, callback, stage+1)
-		// 		return
-		// 	}
-		// }
-
-	case ResolveStageMidpointPriceCo:
-		if isGreaterThanOrEqualToZero(values[0]) {
-			nextStage := stage + 1
-			if isMidpointOrder(com.Buy) && isMidpointOrder(com.Sell) {
-				nextStage = stage + 3
+	case ResolveStageMidpointBuyPriceExp:
+		if isGreaterThanZero(values[0]) {
+			com.Buy.Price = com.MidpointPrice
+			if isMidpointOrder(com.Sell) {
+				matcher.resolve(networkID, com, callback, stage+2)
+				return
 			}
-			matcher.resolve(networkID, com, callback, nextStage)
+			matcher.resolve(networkID, com, callback, stage+4)
+			return
+		}
+		if isEqualToZero(values[0]) {
+			matcher.resolve(networkID, com, callback, stage+1)
 			return
 		}
 
+	case ResolveStageMidpointBuyPriceCo:
+		if isGreaterThanOrEqualToZero(values[0]) {
+			com.Buy.Price = com.MidpointPrice
+			if isMidpointOrder(com.Sell) {
+				matcher.resolve(networkID, com, callback, stage+1)
+				return
+			}
+			matcher.resolve(networkID, com, callback, stage+3)
+			return
+		}
+
+	case ResolveStageMidpointSellPriceExp:
+		if isGreaterThanZero(values[0]) {
+			com.Sell.Price = com.MidpointPrice
+			if isMidpointOrder(com.Buy) {
+				matcher.resolve(networkID, com, callback, stage+4)
+				return
+			}
+			matcher.resolve(networkID, com, callback, stage+2)
+			return
+		}
+		if isEqualToZero(values[0]) {
+			matcher.resolve(networkID, com, callback, stage+1)
+			return
+		}
+
+	case ResolveStageMidpointSellPriceCo:
+		if isGreaterThanOrEqualToZero(values[0]) {
+			com.Sell.Price = com.MidpointPrice
+			if isMidpointOrder(com.Buy) {
+				matcher.resolve(networkID, com, callback, stage+3)
+				return
+			}
+			matcher.resolve(networkID, com, callback, stage+1)
+			return
+		}
 	case ResolveStagePriceExp, ResolveStageBuyVolumeExp, ResolveStageSellVolumeExp:
 		if isGreaterThanZero(values[0]) {
 			matcher.resolve(networkID, com, callback, stage+2)
@@ -228,52 +263,65 @@ func (matcher *matcher) resolveValues(values []uint64, networkID smpc.NetworkID,
 	callback(com)
 }
 
+// updateMidpointData will retrieve the mid-point price and nonce from the
+// midpointPriceStore and update computation with the new data.
+func (matcher *matcher) updateMidpointData(com *Computation) error {
+	// midpointPrice, err := matcher.midpointPriceStore.MidpointPrice(com.Buy.Tokens)
+	// if err != nil {
+	// 	return fmt.Errorf("cannot retrieve midpoint price for buy = %v, sell = %v", com.Buy.OrderID, com.Sell.OrderID)
+	// }
+	// midpointNonce, err := matcher.midpointPriceStore.Nonce()
+	// if err != nil {
+	// 	return fmt.Errorf("cannot retrieve midpoint nonce for buy = %v, sell = %v", com.Buy.OrderID, com.Sell.OrderID)
+	// }
+	// midpointPriceCoExp := PriceFloatToCoExp(float64(midpointPrice))
+	// com.MidpointPrice = midpointPriceCoExp
+	// com.MidpointNonce = midpointNonce
+	return nil
+}
+
 func buildJoin(com Computation, stage ResolveStage) (smpc.Join, error) {
-	var shares []shamir.Share
+	var share shamir.Share
 
 	switch stage {
-	case ResolveStageMidpointPriceExp:
-		if isMidpointOrder(com.Buy) {
-			shares = append(shares, com.MidpointPrice.Exp.Sub(&com.Buy.Price.Exp))
-		}
-		if isMidpointOrder(com.Sell) {
-			shares = append(shares, com.Sell.Price.Exp.Sub(&com.MidpointPrice.Exp))
-		}
+	case ResolveStageMidpointBuyPriceExp:
+		share = com.MidpointPrice.Exp.Sub(&com.Buy.Price.Exp)
 
-	case ResolveStageMidpointPriceCo:
-		if isMidpointOrder(com.Buy) {
-			shares = append(shares, com.MidpointPrice.Co.Sub(&com.Buy.Price.Co))
-		}
-		if isMidpointOrder(com.Sell) {
-			shares = append(shares, com.Sell.Price.Co.Sub(&com.MidpointPrice.Exp))
-		}
+	case ResolveStageMidpointBuyPriceCo:
+		share = com.MidpointPrice.Co.Sub(&com.Buy.Price.Co)
+
+	case ResolveStageMidpointSellPriceExp:
+		share = com.Sell.Price.Exp.Sub(&com.MidpointPrice.Exp)
+
+	case ResolveStageMidpointSellPriceCo:
+		share = com.Sell.Price.Co.Sub(&com.MidpointPrice.Exp)
 
 	case ResolveStagePriceExp:
-		shares = append(shares, com.Buy.Price.Exp.Sub(&com.Sell.Price.Exp))
+		share = com.Buy.Price.Exp.Sub(&com.Sell.Price.Exp)
 
 	case ResolveStagePriceCo:
-		shares = append(shares, com.Buy.Price.Co.Sub(&com.Sell.Price.Co))
+		share = com.Buy.Price.Co.Sub(&com.Sell.Price.Co)
 
 	case ResolveStageBuyVolumeExp:
-		shares = append(shares, com.Buy.Volume.Exp.Sub(&com.Sell.MinimumVolume.Exp))
+		share = com.Buy.Volume.Exp.Sub(&com.Sell.MinimumVolume.Exp)
 
 	case ResolveStageBuyVolumeCo:
-		shares = append(shares, com.Buy.Volume.Co.Sub(&com.Sell.MinimumVolume.Co))
+		share = com.Buy.Volume.Co.Sub(&com.Sell.MinimumVolume.Co)
 
 	case ResolveStageSellVolumeExp:
-		shares = append(shares, com.Sell.Volume.Exp.Sub(&com.Buy.MinimumVolume.Exp))
+		share = com.Sell.Volume.Exp.Sub(&com.Buy.MinimumVolume.Exp)
 
 	case ResolveStageSellVolumeCo:
-		shares = append(shares, com.Sell.Volume.Co.Sub(&com.Buy.MinimumVolume.Co))
+		share = com.Sell.Volume.Co.Sub(&com.Buy.MinimumVolume.Co)
 
 	case ResolveStageTokens:
-		shares = append(shares, com.Buy.Tokens.Sub(&com.Sell.Tokens))
+		share = com.Buy.Tokens.Sub(&com.Sell.Tokens)
 	default:
 		return smpc.Join{}, ErrUnexpectedResolveStage
 	}
 	join := smpc.Join{
-		Index:  smpc.JoinIndex(shares[0].Index),
-		Shares: shares,
+		Index:  smpc.JoinIndex(share.Index),
+		Shares: []shamir.Share{share},
 	}
 	copy(join.ID[:], com.ID[:])
 	join.ID[32] = byte(stage)
@@ -304,12 +352,38 @@ func isMidpointOrder(fragment order.Fragment) bool {
 	return fragment.OrderType == order.TypeMidpoint || fragment.OrderType == order.TypeMidpointFOK
 }
 
-func isMidpointPriceOutOfRange(fragment order.Fragment, midpointPriceStore oracle.MidpointPriceStorer) bool {
-	// if fragment.OrderParity == order.ParityBuy && fragment.Price > midpointPriceStore.MidpointPrice()[fragment.Tokens] {
-	// 	return false
-	// }
-	// if fragment.OrderParity == order.ParitySell && fragment.Price > midpointPriceStore.MidpointPrice() {
-	// 	return false
-	// }
-	return true
+// PriceFloatToCoExp converts a float number price to a CoExp format.
+func PriceFloatToCoExp(price float64) order.CoExp {
+	if price > 10 {
+		prev := PriceFloatToCoExp(price / 10)
+		return order.CoExp{
+			Co:  prev.Co,
+			Exp: prev.Exp + 1,
+		}
+	} else if price < 0.005 {
+		prev := PriceFloatToCoExp(price * 10)
+		return order.CoExp{
+			Co:  prev.Co,
+			Exp: prev.Exp - 1,
+		}
+	} else {
+		if price == 0 {
+			return order.CoExp{
+				Co:  0,
+				Exp: 0,
+			}
+		}
+		if price < 1 {
+			prev := PriceFloatToCoExp(price * 10)
+			return order.CoExp{
+				Co:  prev.Co,
+				Exp: prev.Exp - 1,
+			}
+		}
+	}
+	try := math.Round(price / 0.005)
+	return order.CoExp{
+		Co:  uint64(try),
+		Exp: 38,
+	}
 }
