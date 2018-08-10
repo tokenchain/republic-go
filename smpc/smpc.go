@@ -50,7 +50,7 @@ type smpcer struct {
 	selfJoins   map[JoinID]Join
 
 	commitmentsMu *sync.RWMutex
-	commitments   map[NetworkID](map[JoinID]JoinCommitments)
+	commitments   map[NetworkID]map[JoinID]JoinCommitments
 }
 
 // NewSmpcer returns an Smpcer node that is not connected to a network.
@@ -63,7 +63,7 @@ func NewSmpcer(conn ConnectorListener, swarmer swarm.Swarmer) Smpcer {
 		selfJoins:   map[JoinID]Join{},
 
 		commitmentsMu: new(sync.RWMutex),
-		commitments:   map[NetworkID](map[JoinID]JoinCommitments){},
+		commitments:   map[NetworkID]map[JoinID]JoinCommitments{},
 	}
 	smpc.network = NewNetwork(conn, smpc, swarmer)
 	return smpc
@@ -249,6 +249,10 @@ func (smpc *smpcer) verifyJoin(networkID NetworkID, join Join) bool {
 		if !ok {
 			// We accept the join if we do not have the JoinCommitments to
 			// check for incorrectness
+			continue
+		}
+		// TODO : Not sure why this would happen
+		if lhs.Int == nil || rhs.Int == nil {
 			continue
 		}
 		rhs.Int.ModInverse(rhs.Int, shamir.CommitP)
