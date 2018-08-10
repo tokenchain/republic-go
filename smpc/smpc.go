@@ -6,10 +6,9 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/republicprotocol/republic-go/shamir"
-
 	"github.com/republicprotocol/republic-go/identity"
 	"github.com/republicprotocol/republic-go/logger"
+	"github.com/republicprotocol/republic-go/shamir"
 	"github.com/republicprotocol/republic-go/swarm"
 )
 
@@ -263,8 +262,8 @@ func (smpc *smpcer) verifyJoin(networkID NetworkID, join Join) bool {
 		expected.Mod(expected, shamir.CommitP)
 		got := shamir.NewCommitment(join.Shares[i], join.Blindings[i])
 
+		// Reject the join
 		if expected.Cmp(got.Int) != 0 {
-			// Reject the join
 			return false
 		}
 	}
